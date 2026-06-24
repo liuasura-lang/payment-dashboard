@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Dashboard</title>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+    background: #0f0f13; color: #e8e8f0; min-height: 100vh; padding: 28px 28px;
+  }
+
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  h1 { font-size: 22px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
+  .btn-action { border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .btn-export  { background: #1e3a2e; color: #4ade80; border: 1px solid #166534; }
+  .btn-export:hover  { background: #166534; }
+
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: #1a1a24; border: 1px solid #2a2a38; border-radius: 14px; padding: 20px 22px; }
+  .stat-card .label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 10px; }
+  .stat-card .value { font-size: 26px; font-weight: 700; color: #fff; }
+  .stat-card .value.positive { color: #4ade80; }
+  .stat-card .value.negative { color: #f87171; }
+  .income-wrap { display: flex; align-items: baseline; gap: 4px; }
+  .currency-symbol { font-size: 18px; color: #555; font-weight: 600; }
+  #income-input { font-size: 26px; font-weight: 700; color: #fff; background: transparent; border: none; border-bottom: 2px solid #3a3a52; width: 180px; outline: none; padding: 2px 0; }
+  #income-input:focus { border-bottom-color: #818cf8; }
+
+  /* Add form */
+  .add-form { background: #1a1a24; border: 1px solid #2a2a38; border-radius: 14px; padding: 18px 22px; margin-bottom: 28px; }
+  .add-form h2 { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 14px; }
+  .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .form-row input, .form-row select { background: #0f0f13; border: 1px solid #2a2a38; border-radius: 8px; color: #e8e8f0; padding: 9px 14px; font-size: 14px; outline: none; transition: border-color 0.15s; }
+  .form-row input:focus, .form-row select:focus { border-color: #818cf8; }
+  #item-name { flex: 2; min-width: 160px; }
+  #item-amount { flex: 1; min-width: 110px; }
+  .form-row select option { background: #1a1a24; }
+  .period-wrap { display: flex; align-items: center; gap: 6px; }
+  .period-wrap .sep { color: #444; font-size: 13px; }
+  .type-toggle { display: flex; background: #0f0f13; border: 1px solid #2a2a38; border-radius: 8px; overflow: hidden; }
+  .type-toggle label { padding: 9px 16px; font-size: 13px; cursor: pointer; user-select: none; color: #555; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+  .type-toggle input[type=radio] { display: none; }
+  .type-toggle input[type=radio]:checked + label { background: #818cf8; color: #fff; }
+  .btn-add { background: #818cf8; color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+  .btn-add:hover { background: #6366f1; }
+
+  /* Table */
+  .table-panel { background: #1a1a24; border: 1px solid #2a2a38; border-radius: 14px; padding: 20px 22px; overflow-x: auto; }
+  .table-panel-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .table-panel-hdr h2 { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.9px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+
+  th { background: #111118; color: #555; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; padding: 8px 10px; white-space: nowrap; border: 1px solid #1e1e2a; text-align: center; }
+  th.col-name { text-align: left; min-width: 200px; position: sticky; left: 0; z-index: 2; background: #111118; }
+  th.col-month { min-width: 108px; }
+  th.current-month { color: #818cf8; border-bottom: 2px solid #818cf8; }
+
+  td { border: 1px solid #1e1e2a; padding: 0; vertical-align: middle; }
+  td.name-cell { padding: 7px 10px; position: sticky; left: 0; z-index: 1; background: #1a1a24; white-space: nowrap; user-select: none; }
+  td.name-cell .drag-handle { display: inline-block; color: #333; font-size: 13px; margin-right: 6px; cursor: grab; vertical-align: middle; }
+  td.name-cell .drag-handle:active { cursor: grabbing; }
+  td.name-cell .item-label { color: #ccc; font-size: 13px; cursor: text; border-radius: 4px; padding: 2px 4px; display: inline-block; vertical-align: middle; }
+  td.name-cell .item-label:hover { background: #22222e; }
+  td.name-cell .item-label[contenteditable=true] { outline: none; border-bottom: 1px solid #818cf8; background: #111118; color: #fff; min-width: 60px; }
+  td.name-cell .badge { display: inline-block; font-size: 9px; border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: middle; }
+  td.name-cell .b-preset  { color: #555;    background: #111118; border: 1px solid #2a2a38; }
+  td.name-cell .b-carry   { color: #fbbf24; background: #1a1600; border: 1px solid #78350f; }
+  td.name-cell .b-fixed   { color: #818cf8; background: #1a1a2e; border: 1px solid #2a2a4a; }
+  td.name-cell .b-flex    { color: #a78bfa; background: #1e1a2e; border: 1px solid #3a2a5a; }
+  td.name-cell .period-lbl { font-size: 10px; color: #444; margin-left: 3px; vertical-align: middle; }
+
+  td.amount-cell { text-align: center; cursor: pointer; transition: background 0.1s; min-width: 108px; }
+  td.amount-cell:hover { background: #22222e; }
+  td.amount-cell.paid { background: #0d2a1a; }
+  td.amount-cell.paid .cell-amt { color: #4ade80; text-decoration: line-through; opacity: 0.7; }
+  td.amount-cell .cell-inner { display: flex; flex-direction: column; align-items: center; padding: 7px 6px; }
+  td.amount-cell .cell-amt { color: #f87171; font-weight: 600; font-size: 12px; padding: 1px 3px; border-radius: 3px; }
+  td.amount-cell .cell-amt:hover { background: #2a1a1a; }
+  td.amount-cell.paid .cell-amt:hover { background: #0a3a20; }
+  td.amount-cell .cell-note { font-size: 9px; color: #444; margin-top: 1px; }
+  td.amount-cell.empty { cursor: default; }
+  td.amount-cell.empty:hover { background: transparent; }
+  td.amount-cell.readonly { cursor: default; }
+  td.amount-cell.readonly .cell-amt { color: #666 !important; }
+  td.amount-cell.readonly:hover { background: transparent; }
+
+  tr.carry-row td.name-cell { background: #1a1600 !important; }
+  tr.carry-row:hover td.name-cell { background: #221e00 !important; }
+  tr.carry-row td.amount-cell .cell-amt { color: #fbbf24 !important; }
+  tr.carry-row td.amount-cell.paid .cell-amt { color: #4ade80 !important; }
+
+  .amt-edit-input { background: #111118; border: 1px solid #818cf8; border-radius: 4px; color: #fff; font-size: 12px; font-weight: 600; width: 80px; padding: 2px 6px; outline: none; text-align: center; }
+
+  tr.footer-row td { background: #0c0c14 !important; }
+  tr.footer-row.first-footer td { border-top: 2px solid #2a2a38 !important; }
+  tr.footer-row td.amount-cell { cursor: default; }
+  tr.footer-row td.amount-cell:hover { background: #0c0c14 !important; }
+  tr.footer-row td.name-cell { font-size: 11px; letter-spacing: 0.6px; }
+  tr.footer-row.row-total  .name-lbl { color: #666; }
+  tr.footer-row.row-total  .cell-amt { color: #818cf8 !important; text-decoration: none !important; opacity: 1 !important; font-size: 13px; }
+  tr.footer-row.row-paid   .name-lbl { color: #4ade80; }
+  tr.footer-row.row-paid   .cell-amt { color: #4ade80 !important; text-decoration: none !important; opacity: 1 !important; font-size: 13px; }
+  tr.footer-row.row-remain .name-lbl { color: #f87171; }
+  tr.footer-row.row-remain .cell-amt { color: #f87171 !important; text-decoration: none !important; opacity: 1 !important; font-size: 13px; }
+
+  tr:not(.footer-row):not(.carry-row):hover td.name-cell { background: #1e1e2c; }
+
+  tr.dragging td { opacity: 0.35; }
+  tr.drag-over-bottom td { border-bottom: 2px solid #818cf8 !important; }
+
+  /* Context menu */
+  #ctx-menu { position: fixed; z-index: 9999; background: #1e1e2c; border: 1px solid #3a3a52; border-radius: 10px; padding: 6px 0; min-width: 160px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); display: none; }
+  #ctx-menu.visible { display: block; }
+  .ctx-item { padding: 9px 16px; font-size: 13px; cursor: pointer; color: #e8e8f0; transition: background 0.1s; }
+  .ctx-item:hover { background: #2a2a3e; }
+  .ctx-item.danger { color: #f87171; }
+  .ctx-item.danger:hover { background: #2a1010; }
+  .ctx-label { padding: 6px 16px 4px; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.7px; }
+  .ctx-month-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 2px; padding: 4px 8px 8px; }
+  .ctx-month-btn { padding: 5px 4px; font-size: 11px; text-align: center; cursor: pointer; color: #ccc; background: #111118; border-radius: 5px; border: 1px solid #2a2a38; transition: all 0.1s; }
+  .ctx-month-btn:hover { background: #818cf8; color: #fff; border-color: #818cf8; }
+  .ctx-divider { height: 1px; background: #2a2a38; margin: 4px 0; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: #1e1e2c; border: 1px solid #3a3a52; border-radius: 10px; padding: 12px 24px; font-size: 13px; color: #e8e8f0; box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none; z-index: 10000; text-align: center; max-width: 420px; }
+  #toast.visible { display: block; }
+  #toast.success { border-color: #166534; color: #4ade80; }
+  #toast.info    { border-color: #3a3a52; color: #aaa; }
+
+  /* Month-end banner */
+  .me-banner {
+    background: #1a1200; border: 1px solid #78350f; border-radius: 12px;
+    padding: 14px 20px; margin-bottom: 20px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .me-banner-text { font-size: 13px; color: #fbbf24; }
+  .me-banner-text strong { font-weight: 700; }
+  .me-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .btn-me-run  { background: #78350f; color: #fbbf24; border: 1px solid #92400e; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn-me-run:hover  { background: #92400e; }
+  .btn-me-skip { background: transparent; color: #555; border: 1px solid #2a2a38; border-radius: 7px; padding: 7px 14px; font-size: 12px; cursor: pointer; }
+  .btn-me-skip:hover { color: #888; }
+
+  td.name-cell .b-auto    { color: #34d399; background: #022c22; border: 1px solid #065f46; }
+
+  .legend { display: flex; gap: 18px; margin-top: 14px; font-size: 11px; color: #444; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 2px; }
+  .dot.green { background: #0d2a1a; border: 1px solid #166534; }
+  .dot.red   { background: #2a1010; border: 1px solid #f87171; }
+  .hint { font-size: 11px; color: #333; margin-top: 8px; }
+  .btn-show-hidden { background: transparent; color: #555; border: 1px solid #2a2a38; border-radius: 7px; padding: 6px 13px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .btn-show-hidden:hover { color: #aaa; border-color: #555; }
+  .btn-show-hidden.active { color: #818cf8; border-color: #818cf8; background: #1a1a2e; }
+  .hidden-badge { display: inline-block; background: #2a2a38; color: #555; border-radius: 10px; font-size: 10px; padding: 1px 7px; margin-left: 6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>Payment Dashboard</h1>
+  <button class="btn-action btn-export" onclick="exportExcel(CURRENT_MONTH)">⬇ Export This Month</button>
+</div>
+
+
+<!-- Month-end banner -->
+<div class="me-banner" id="me-banner" style="display:none">
+  <div class="me-banner-text" id="me-banner-text"></div>
+  <div class="me-banner-actions">
+    <button class="btn-me-run"  id="me-banner-run">✓ Run Month-End</button>
+    <button class="btn-me-skip" onclick="dismissBanner()">Later</button>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="label">Income / 总收入</div>
+    <div class="income-wrap">
+      <span class="currency-symbol">¥</span>
+      <input type="number" id="income-input" placeholder="0" min="0" step="0.01">
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">This Month Pending / 本月待支出</div>
+    <div class="value negative" id="total-pending">¥0</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Balance / 余额</div>
+    <div class="value" id="balance">¥0</div>
+  </div>
+</div>
+
+<div class="add-form">
+  <h2>Add Custom Outcome / 添加支出</h2>
+  <div class="form-row">
+    <input type="text" id="item-name" placeholder="Item name / 项目名称">
+    <input type="number" id="item-amount" placeholder="Amount / 金额" min="0" step="0.01">
+    <div class="type-toggle">
+      <input type="radio" name="item-type" id="type-fixed" value="fixed">
+      <label for="type-fixed">Fixed 固定</label>
+      <input type="radio" name="item-type" id="type-flexible" value="flexible" checked>
+      <label for="type-flexible">Flexible 灵活</label>
+    </div>
+    <div class="period-wrap" id="period-fixed" style="display:none">
+      <select id="item-month-from"></select>
+      <span class="sep">→</span>
+      <select id="item-month-to"></select>
+    </div>
+    <div id="period-flex">
+      <select id="item-month-flex"></select>
+    </div>
+    <button class="btn-add" onclick="addOutcome()">+ 添加</button>
+  </div>
+</div>
+
+<div class="table-panel">
+  <div class="table-panel-hdr">
+    <h2>Monthly Payment Plan / 月度支出计划 — <span id="year-label"></span></h2>
+    <button class="btn-show-hidden" id="btn-show-hidden" onclick="toggleShowHidden()">
+      Show paid history <span class="hidden-badge" id="hidden-count">0</span>
+    </button>
+  </div>
+  <table id="main-table">
+    <thead id="table-head"></thead>
+    <tbody id="table-body"></tbody>
+  </table>
+  <div class="legend">
+    <span><span class="dot red"></span>Unpaid（click to mark paid）</span>
+    <span><span class="dot green"></span>Paid（click to unmark）</span>
+  </div>
+  <div class="hint">⠿ drag · dblclick name = rename · dblclick ¥ = edit this month · right-click name = delete · right-click unpaid custom cell = move to month</div>
+</div>
+
+<div id="ctx-menu">
+  <div class="ctx-item danger" id="ctx-delete">🗑 Delete / 删除</div>
+  <div class="ctx-divider" id="ctx-div-move"></div>
+  <div class="ctx-label"      id="ctx-move-label">📅 Move to / 移至</div>
+  <div class="ctx-month-grid" id="ctx-month-grid"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Constants ─────────────────────────────────────────────
+const ALL_MONTHS    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DISPLAY_START = 4;
+const DISPLAY_END   = 11;
+const now           = new Date();
+const CURRENT_MONTH = now.getMonth();
+const CURRENT_YEAR  = now.getFullYear();
+const NEXT_MONTH    = Math.min(CURRENT_MONTH + 1, DISPLAY_END);
+
+const FIXED_ITEMS_DEF = [
+  { id:'f1',  name:'建行利息',           amount:16458.33  },
+  { id:'f2',  name:'北京赵彤/王/宋工资', amount:13214.99  },
+  { id:'f3',  name:'约定工资',            amount:5000      },
+  { id:'f4',  name:'三个天津',            amount:24000     },
+  { id:'f5',  name:'和合医保',            amount:46187.52  },
+  { id:'f6',  name:'益佳医保',            amount:23746.28  },
+  { id:'f7',  name:'天津完整社保',        amount:16389.75  },
+  { id:'f8',  name:'个税',               amount:5570.61   },
+  { id:'f9',  name:'房租',               amount:150000    },
+  { id:'f10', name:'微众',               amount:56860.14  },
+  { id:'f11', name:'中科租赁',            amount:292935.86 },
+  { id:'f12', name:'中关村租赁',          amount:121000    },
+  { id:'f13', name:'江苏金租',            amount:20000     },
+  { id:'f14', name:'各种采购',            amount:3200      },
+  { id:'f15', name:'网费',               amount:12000     },
+  { id:'f16', name:'桶装水',             amount:1570      },
+  { id:'f17', name:'益佳工资',            amount:227965.96 },
+  { id:'f18', name:'北京工资',            amount:173041.30 },
+  { id:'f19', name:'SF',                amount:3038      },
+];
+const CARRY_ID = 'f_carry';
+
+// ── State ─────────────────────────────────────────────────
+function load() {
+  try { const s = localStorage.getItem('pmt-dash-v5'); if (s) return JSON.parse(s); } catch(e) {}
+  return {};
+}
+function applyDefaults(s) {
+  if (s.income       === undefined) s.income       = 0;
+  if (!s.customs)      s.customs      = [];
+  if (!s.paid)         s.paid         = {};
+  if (!s.overrides)    s.overrides    = {};
+  if (!s.names)        s.names        = {};
+  if (!s.deletedIds)   s.deletedIds   = [];
+  if (!s.order)        s.order        = [];
+  if (!s.monthEndDone)   s.monthEndDone   = {};
+  if (!s.monthEndDetail) s.monthEndDetail = {};
+
+  // Migration: strip old-format "May 灵活合计" name prefix
+  const monthPrefixes = ALL_MONTHS.map(m => m + ' ');
+  s.customs.forEach(c => {
+    if (c._auto && monthPrefixes.some(p => c.name && c.name.startsWith(p))) {
+      c.name = c.name.replace(/^[A-Za-z]+ /, '');
+      delete s.names[c.id];
+    }
+  });
+
+  return s;
+}
+function save() { localStorage.setItem('pmt-dash-v5', JSON.stringify(state)); }
+let state = applyDefaults(load());
+
+// ── Helpers ───────────────────────────────────────────────
+const fmtN = n => '¥' + Number(n).toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2});
+const uid  = () => 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+const pk   = (id, mi) => id + '_' + mi;
+
+function inMonth(item, mi) {
+  if (mi < DISPLAY_START || mi > DISPLAY_END) return false;
+  return mi >= item.startMonth && mi <= item.endMonth;
+}
+
+let g_carryovers = {};
+
+function cellAmount(item, mi) {
+  if (item._carryover) {
+    if (mi === DISPLAY_START) return state.overrides[pk(CARRY_ID, mi)] ?? 0;
+    return g_carryovers[mi] ?? 0;
+  }
+  const ov = state.overrides[pk(item.id, mi)];
+  return ov !== undefined ? ov : item.amount;
+}
+
+function getAllRaw() {
+  const names = state.names;
+  const del   = state.deletedIds;
+  const bi = FIXED_ITEMS_DEF
+    .filter(f => !del.includes(f.id))
+    .map(f => ({ ...f, type:'fixed', startMonth:DISPLAY_START, endMonth:DISPLAY_END,
+                 _builtIn:true, name: names[f.id] || f.name }));
+  if (!del.includes(CARRY_ID))
+    bi.push({ id:CARRY_ID, name: names[CARRY_ID]||'上月结余', type:'fixed',
+              startMonth:DISPLAY_START, endMonth:DISPLAY_END, _builtIn:true, _carryover:true, amount:0 });
+  const customs = state.customs.map(c => ({ ...c, name: names[c.id] || c.name }));
+  return [...bi, ...customs];
+}
+
+function syncOrder() {
+  const allIds = getAllRaw().map(i => i.id);
+  allIds.forEach(id => {
+    if (!state.order.includes(id)) {
+      if (id === CARRY_ID) {
+        const idx = state.order.indexOf('f19');
+        state.order.splice(idx !== -1 ? idx + 1 : state.order.length, 0, CARRY_ID);
+      } else {
+        state.order.push(id);
+      }
+    }
+  });
+  state.order = state.order.filter(id => allIds.includes(id));
+}
+
+function getSortedItems() {
+  syncOrder();
+  const map = {};
+  getAllRaw().forEach(i => { map[i.id] = i; });
+  return state.order.map(id => map[id]).filter(Boolean);
+}
+
+function computeCarryovers(items) {
+  const nonCarry = items.filter(i => !i._carryover);
+  const result = { [DISPLAY_START]: state.overrides[pk(CARRY_ID, DISPLAY_START)] ?? 0 };
+  for (let mi = DISPLAY_START + 1; mi <= DISPLAY_END; mi++) {
+    const prev = mi - 1;
+    let remain = 0;
+    nonCarry.forEach(item => {
+      if (!inMonth(item, prev)) return;
+      const ov  = state.overrides[pk(item.id, prev)];
+      const amt = ov !== undefined ? ov : item.amount;
+      if (!state.paid[pk(item.id, prev)]) remain += amt;
+    });
+    if (result[prev] > 0 && !state.paid[pk(CARRY_ID, prev)]) remain += result[prev];
+    result[mi] = remain;
+  }
+  return result;
+}
+
+function computeStats(items) {
+  const stats = {};
+  for (let mi = DISPLAY_START; mi <= DISPLAY_END; mi++) {
+    let total = 0, paid = 0, unpaid = 0;
+    const prevDone = !!state.monthEndDone[(mi - 1) + '_' + CURRENT_YEAR];
+    items.forEach(item => {
+      if (!inMonth(item, mi)) return;
+      if (item._carryover && !prevDone) return;
+      const amt = cellAmount(item, mi);
+      total += amt;
+      if (state.paid[pk(item.id, mi)]) paid += amt; else unpaid += amt;
+    });
+    stats[mi] = { total, paid, unpaid };
+  }
+  return stats;
+}
+
+// ── Form ──────────────────────────────────────────────────
+function populateSelect(sel, defaultVal) {
+  sel.innerHTML = '';
+  for (let i = DISPLAY_START; i <= DISPLAY_END; i++) {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = ALL_MONTHS[i] + ' ' + CURRENT_YEAR;
+    if (i === defaultVal) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+function buildMonthSelects() {
+  populateSelect(document.getElementById('item-month-from'), NEXT_MONTH);
+  populateSelect(document.getElementById('item-month-to'),   DISPLAY_END);
+  populateSelect(document.getElementById('item-month-flex'), CURRENT_MONTH);
+}
+function syncFormType() {
+  const isFixed = document.getElementById('type-fixed').checked;
+  document.getElementById('period-fixed').style.display = isFixed ? 'flex' : 'none';
+  document.getElementById('period-flex').style.display  = isFixed ? 'none' : 'block';
+}
+document.querySelectorAll('input[name="item-type"]').forEach(r => r.addEventListener('change', syncFormType));
+
+function addOutcome() {
+  const name    = document.getElementById('item-name').value.trim();
+  const amount  = parseFloat(document.getElementById('item-amount').value);
+  const isFixed = document.getElementById('type-fixed').checked;
+  if (!name)                        { alert('请输入项目名称'); return; }
+  if (isNaN(amount) || amount <= 0) { alert('请输入有效金额'); return; }
+  let startMonth, endMonth;
+  if (isFixed) {
+    startMonth = parseInt(document.getElementById('item-month-from').value);
+    endMonth   = parseInt(document.getElementById('item-month-to').value);
+    if (endMonth < startMonth) { alert('结束月份不能早于开始月份'); return; }
+  } else {
+    startMonth = endMonth = parseInt(document.getElementById('item-month-flex').value);
+  }
+  state.customs.push({ id: uid(), name, amount: Number(amount), type: isFixed ? 'fixed' : 'flexible', startMonth, endMonth });
+  save();
+  document.getElementById('item-name').value = document.getElementById('item-amount').value = '';
+  render();
+}
+
+// ── Delete ────────────────────────────────────────────────
+function deleteItem(id) {
+  const isBuiltIn = FIXED_ITEMS_DEF.some(f => f.id === id) || id === CARRY_ID;
+  if (isBuiltIn) state.deletedIds.push(id);
+  else state.customs = state.customs.filter(c => c.id !== id);
+  state.order = state.order.filter(x => x !== id);
+  for (let mi = DISPLAY_START; mi <= DISPLAY_END; mi++) {
+    delete state.paid[pk(id, mi)]; delete state.overrides[pk(id, mi)];
+  }
+  delete state.names[id];
+  save(); render();
+}
+
+// ── Move item to another month ────────────────────────────
+// Works for custom flex (single month) and custom fixed (shifts the range)
+function moveItem(id, newMonth) {
+  const item = state.customs.find(c => c.id === id);
+  if (!item) return;
+  if (item.type === 'flexible') {
+    const old = item.startMonth;
+    delete state.paid[pk(id, old)]; delete state.overrides[pk(id, old)];
+    item.startMonth = item.endMonth = newMonth;
+  } else {
+    // Shift the whole range: keep duration, move start to newMonth
+    const delta  = newMonth - item.startMonth;
+    const newEnd = Math.min(item.endMonth + delta, DISPLAY_END);
+    for (let mi = item.startMonth; mi <= item.endMonth; mi++) {
+      delete state.paid[pk(id, mi)]; delete state.overrides[pk(id, mi)];
+    }
+    item.startMonth = newMonth;
+    item.endMonth   = Math.max(newEnd, newMonth);
+  }
+  save(); hideCtxMenu(); render();
+  showToast('Moved to ' + ALL_MONTHS[newMonth], 'success');
+}
+
+// ── Context menu ──────────────────────────────────────────
+const ctxMenu = document.getElementById('ctx-menu');
+let ctxItemId = null;
+
+function showCtxName(e, id) {
+  e.preventDefault(); e.stopPropagation();
+  ctxItemId = id;
+  document.getElementById('ctx-delete').style.display     = 'block';
+  document.getElementById('ctx-div-move').style.display   = 'none';
+  document.getElementById('ctx-move-label').style.display = 'none';
+  document.getElementById('ctx-month-grid').style.display = 'none';
+  posCtxMenu(e);
+}
+
+function showCtxCell(e, id, month) {
+  e.preventDefault(); e.stopPropagation();
+  ctxItemId = id;
+  document.getElementById('ctx-delete').style.display     = 'none';
+  document.getElementById('ctx-div-move').style.display   = 'block';
+  document.getElementById('ctx-move-label').style.display = 'block';
+  document.getElementById('ctx-month-grid').style.display = 'grid';
+  const item = state.customs.find(c => c.id === id);
+  const curStart = item ? item.startMonth : month;
+  const grid = document.getElementById('ctx-month-grid');
+  grid.innerHTML = '';
+  for (let mi = DISPLAY_START; mi <= DISPLAY_END; mi++) {
+    if (mi === curStart) continue; // skip current start
+    const btn = document.createElement('div');
+    btn.className = 'ctx-month-btn';
+    btn.textContent = ALL_MONTHS[mi];
+    btn.addEventListener('click', () => moveItem(id, mi));
+    grid.appendChild(btn);
+  }
+  posCtxMenu(e);
+}
+
+function posCtxMenu(e) {
+  const x = Math.min(e.clientX, window.innerWidth  - 200);
+  const y = Math.min(e.clientY, window.innerHeight - 290);
+  ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px';
+  ctxMenu.classList.add('visible');
+}
+function hideCtxMenu() { ctxMenu.classList.remove('visible'); ctxItemId = null; }
+document.getElementById('ctx-delete').addEventListener('click', () => { if (ctxItemId) deleteItem(ctxItemId); hideCtxMenu(); });
+document.addEventListener('click', e => { if (!e.target.closest('#ctx-menu')) hideCtxMenu(); });
+document.addEventListener('contextmenu', e => { if (!e.target.closest('[data-ctx]') && !e.target.closest('#ctx-menu')) hideCtxMenu(); });
+
+// ── Drag-to-reorder ───────────────────────────────────────
+let dragSrcId = null;
+function attachDrag(tr, itemId) {
+  tr.setAttribute('draggable', 'true');
+  tr.addEventListener('dragstart', e => { dragSrcId = itemId; tr.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+  tr.addEventListener('dragend',   () => { tr.classList.remove('dragging'); document.querySelectorAll('.drag-over-bottom').forEach(el => el.classList.remove('drag-over-bottom')); dragSrcId = null; });
+  tr.addEventListener('dragover',  e => { e.preventDefault(); document.querySelectorAll('.drag-over-bottom').forEach(el => el.classList.remove('drag-over-bottom')); if (dragSrcId !== itemId) tr.classList.add('drag-over-bottom'); });
+  tr.addEventListener('dragleave', () => tr.classList.remove('drag-over-bottom'));
+  tr.addEventListener('drop', e => {
+    e.preventDefault(); tr.classList.remove('drag-over-bottom');
+    if (!dragSrcId || dragSrcId === itemId) return;
+    const o = state.order, si = o.indexOf(dragSrcId), ti = o.indexOf(itemId);
+    if (si === -1 || ti === -1) return;
+    o.splice(si, 1); o.splice(o.indexOf(itemId), 0, dragSrcId);
+    save(); render();
+  });
+}
+
+// ── Inline rename ─────────────────────────────────────────
+function enableRename(labelEl, itemId) {
+  if (labelEl.getAttribute('contenteditable') === 'true') return;
+  labelEl.setAttribute('contenteditable', 'true'); labelEl.focus();
+  const r = document.createRange(); r.selectNodeContents(labelEl);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+  function commit() {
+    labelEl.removeAttribute('contenteditable');
+    const n = labelEl.textContent.trim();
+    if (n) { state.names[itemId] = n; save(); } else render();
+  }
+  labelEl.addEventListener('blur', commit, { once: true });
+  labelEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); labelEl.blur(); }
+    if (e.key === 'Escape') render();
+  }, { once: true });
+}
+
+// ── Inline amount edit ────────────────────────────────────
+function enableAmountEdit(td, item, mi) {
+  if (item._carryover && mi !== DISPLAY_START) {
+    showToast('Auto-computed from previous month', 'info'); return;
+  }
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.className = 'amt-edit-input';
+  inp.value = cellAmount(item, mi); inp.min = '0'; inp.step = '0.01';
+  const inner = td.querySelector('.cell-inner');
+  inner.innerHTML = ''; inner.appendChild(inp);
+  inp.focus(); inp.select();
+  function commit() {
+    const val = parseFloat(inp.value);
+    if (!isNaN(val) && val >= 0) { state.overrides[pk(item.id, mi)] = val; save(); }
+    render();
+  }
+  inp.addEventListener('blur', commit, { once: true });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') render();
+    e.stopPropagation();
+  });
+  inp.addEventListener('click',    e => e.stopPropagation());
+  inp.addEventListener('dblclick', e => e.stopPropagation());
+}
+
+// ── Toast ─────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'visible ' + type;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+
+// ── Month-end banner ──────────────────────────────────────
+function checkMonthEndBanner() {
+  const m = CURRENT_MONTH, y = CURRENT_YEAR;
+  const prevM = m > 0 ? m - 1 : 11;
+  const prevY = m > 0 ? y : y - 1;
+  const key   = prevM + '_' + prevY;
+  if (prevM >= DISPLAY_START && prevM <= DISPLAY_END && !state.monthEndDone[key]) {
+    const banner = document.getElementById('me-banner');
+    document.getElementById('me-banner-text').innerHTML =
+      `<strong>${ALL_MONTHS[prevM]} ${prevY}</strong> has ended — run month-end to consolidate flex payments and export Excel`;
+    document.getElementById('me-banner-run').onclick = () => runMonthEnd(prevM);
+    banner.style.display = 'flex';
+  }
+}
+
+function dismissBanner() {
+  document.getElementById('me-banner').style.display = 'none';
+}
+
+// ── Month-end process ─────────────────────────────────────
+function runMonthEnd(month) {
+  const paidFlex = state.customs.filter(c =>
+    !c._auto && c.type === 'flexible' && inMonth(c, month) && state.paid[pk(c.id, month)]
+  );
+  const paidSum = paidFlex.reduce((s, c) => {
+    const ov = state.overrides[pk(c.id, month)];
+    return s + Number(ov !== undefined ? ov : c.amount);
+  }, 0);
+
+  const names = paidFlex.map(c => (state.names[c.id] || c.name) + ' ¥' + Number(state.overrides[pk(c.id, month)] ?? c.amount).toLocaleString()).join('\n  ');
+  const msg = [
+    `Month-End: ${ALL_MONTHS[month]} ${CURRENT_YEAR}`,
+    ``,
+    `Paid flex items to consolidate (${paidFlex.length}):`,
+    `  ${names || '(none)'}`,
+    ``,
+    `→ Create "灵活合计" = ¥${paidSum.toLocaleString()} (auto-marked paid)`,
+    `→ Delete ${paidFlex.length} paid flex items`,
+    `→ Export ${CURRENT_YEAR}${String(month + 1).padStart(2, '0')}.xlsx`,
+    ``,
+    `Proceed?`
+  ].join('\n');
+
+  if (!confirm(msg)) return;
+  dismissBanner();
+
+  // Remove old auto-item if re-running
+  const autoId = 'auto_' + month + '_' + CURRENT_YEAR;
+  state.customs = state.customs.filter(c => c.id !== autoId);
+  state.order   = state.order.filter(x => x !== autoId);
+  delete state.paid[pk(autoId, month)];
+
+  // Create 灵活合计 (auto-paid green)
+  if (paidSum > 0 || paidFlex.length > 0) {
+    state.customs.push({ id: autoId, name: '灵活合计', amount: paidSum,
+      type: 'flexible', startMonth: month, endMonth: month, _auto: true });
+    state.paid[pk(autoId, month)] = true;
+  }
+
+  // Record detail for Excel
+  state.monthEndDetail[month + '_' + CURRENT_YEAR] = paidFlex.map(c => ({
+    name: state.names[c.id] || c.name,
+    amount: Number(state.overrides[pk(c.id, month)] ?? c.amount)
+  }));
+
+  // Delete only PAID flex items; unpaid stay
+  const toDelete = paidFlex.map(c => c.id);
+  toDelete.forEach(id => {
+    for (let mi = DISPLAY_START; mi <= DISPLAY_END; mi++) {
+      delete state.paid[pk(id, mi)]; delete state.overrides[pk(id, mi)];
+    }
+    state.order = state.order.filter(x => x !== id);
+    delete state.names[id];
+  });
+  state.customs = state.customs.filter(c => !toDelete.includes(c.id));
+  state.monthEndDone[month + '_' + CURRENT_YEAR] = true;
+  save(); render();
+  exportExcel(month);
+  showToast(`✅ ${ALL_MONTHS[month]} 月结完成 · 灵活合计 ${fmtN(paidSum)}`, 'success');
+}
+
+// ── Excel export (single month) ───────────────────────────
+function exportExcel(month) {
+  const items = getSortedItems();
+  g_carryovers = computeCarryovers(items);
+
+  const mn    = ALL_MONTHS[month];
+  const ym    = CURRENT_YEAR + String(month + 1).padStart(2, '0'); // e.g. 202205
+  const fname = ym + '.xlsx';
+
+  if (typeof XLSX === 'undefined') {
+    exportCSVFallback(items, month, fname.replace('.xlsx', '.csv'));
+    showToast('⚠ XLSX library offline (no internet) — exported as CSV', 'info');
+    return;
+  }
+
+  const wb  = XLSX.utils.book_new();
+  const hdr = ['Item', 'Type', mn + ' ' + CURRENT_YEAR];
+  const rows = [hdr];
+
+  const detail = (state.monthEndDetail || {})[month + '_' + CURRENT_YEAR] || [];
+  items.forEach(item => {
+    if (!inMonth(item, month)) return;
+    const amt  = cellAmount(item, month);
+    const paid = state.paid[pk(item.id, month)];
+    rows.push([item.name, item._carryover ? 'carryover' : item.type,
+               paid ? `[PAID] ${amt.toFixed(2)}` : amt]);
+    if (item._auto) detail.forEach(d =>
+      rows.push(['  · ' + d.name, 'flex (合计明细)', `[PAID] ${Number(d.amount).toFixed(2)}`]));
+  });
+
+  // Footer
+  const stats = computeStats(items);
+  const s = stats[month];
+  rows.push([]);
+  rows.push(['Monthly Total', '', s.total]);
+  rows.push(['Total Paid',    '', s.paid]);
+  rows.push(['Remain to Pay', '', s.unpaid]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 24 }, { wch: 10 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, ws, mn.toLowerCase());
+  XLSX.writeFile(wb, fname);
+  showToast(`✅ Exported ${fname}`, 'success');
+}
+
+function exportCSVFallback(items, month, fname) {
+  const mn  = ALL_MONTHS[month];
+  const rows = [['Item', 'Type', mn + ' ' + CURRENT_YEAR]];
+  const detail = (state.monthEndDetail || {})[month + '_' + CURRENT_YEAR] || [];
+  items.forEach(item => {
+    if (!inMonth(item, month)) return;
+    const amt = cellAmount(item, month);
+    rows.push([item.name, item._carryover ? 'carryover' : item.type,
+               state.paid[pk(item.id, month)] ? `[PAID] ${amt.toFixed(2)}` : amt]);
+    if (item._auto) detail.forEach(d =>
+      rows.push(['  · ' + d.name, 'flex (合计明细)', `[PAID] ${Number(d.amount).toFixed(2)}`]));
+  });
+  const stats = computeStats(items);
+  const s = stats[month];
+  rows.push([], ['Monthly Total','',s.total], ['Total Paid','',s.paid], ['Remain to Pay','',s.unpaid]);
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv);
+  a.download = fname; a.click();
+}
+
+// ── Hide fully-paid past items ────────────────────────────
+let showHidden = false;
+
+function isRowHidden(item) {
+  // Never hide the carryover row
+  if (item._carryover) return false;
+  // Must have at least one month up to CURRENT_MONTH
+  let hasMonth = false;
+  for (let mi = DISPLAY_START; mi <= Math.min(item.endMonth, CURRENT_MONTH); mi++) {
+    if (!inMonth(item, mi)) continue;
+    hasMonth = true;
+    if (!state.paid[pk(item.id, mi)]) return false; // any unpaid → not hidden
+  }
+  return hasMonth; // all months up to now are paid → hide
+}
+
+function toggleShowHidden() {
+  showHidden = !showHidden;
+  const btn = document.getElementById('btn-show-hidden');
+  btn.classList.toggle('active', showHidden);
+  btn.childNodes[0].textContent = showHidden ? 'Hide paid history ' : 'Show paid history ';
+  render();
+}
+
+// ── Render ────────────────────────────────────────────────
+function render() {
+  document.getElementById('year-label').textContent = CURRENT_YEAR;
+  document.getElementById('income-input').value = state.income || '';
+
+  const items = getSortedItems();
+  g_carryovers = computeCarryovers(items);
+
+  // Stats
+  let monthPending = 0;
+  items.forEach(item => {
+    if (inMonth(item, CURRENT_MONTH) && !state.paid[pk(item.id, CURRENT_MONTH)])
+      monthPending += cellAmount(item, CURRENT_MONTH);
+  });
+  document.getElementById('total-pending').textContent = fmtN(monthPending);
+  const bal = state.income - monthPending;
+  const balEl = document.getElementById('balance');
+  balEl.textContent = fmtN(bal);
+  balEl.className = 'value ' + (bal >= 0 ? 'positive' : 'negative');
+
+  // Header
+  const thead = document.getElementById('table-head');
+  thead.innerHTML = '';
+  const hr = document.createElement('tr');
+  const th0 = document.createElement('th'); th0.className = 'col-name'; th0.textContent = 'Item / 项目';
+  hr.appendChild(th0);
+  for (let mi = DISPLAY_START; mi <= DISPLAY_END; mi++) {
+    const th = document.createElement('th');
+    th.className = 'col-month' + (mi === CURRENT_MONTH ? ' current-month' : '');
+    th.textContent = ALL_MONTHS[mi]; hr.appendChild(th);
+  }
+  thead.appendChild(hr);
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  const hiddenCount = items.filter(i => isRowHidden(i)).length;
+  document.getElementById('hidden-count').textContent = hiddenCount;
+  document.getElementById('btn-show-hidden').style.display = hiddenCount > 0 ? '' : 'none';
+  items.forEach(item => {
+    if (isRowHidden(item) && !showHidden) return;
+    tbody.appendChild(buildRow(item));
+  });
+
+  const stats = computeStats(items);
+  addFooter(tbody, 'Monthly Total',         'row-total  first-footer', mi => fmtN(stats[mi].total));
+  addFooter(tbody, 'Total Paid / 已支付',    'row-paid',               mi => fmtN(stats[mi].paid));
+  addFooter(tbody, 'Remain to Pay / 待支付', 'row-remain',             mi => fmtN(stats[mi].unpaid));
+}
+
+function addFooter(tbody, label, cls, valFn) {
+  const tr = document.createElement('tr'); tr.className = 'footer-row ' + cls;
+  const ntd = document.createElement('td'); ntd.className = 'name-cell';
+  ntd.innerHTML = `<span class="name-lbl">${label}</span>`; tr.appendChild(ntd);
+  for (let mi = DISPLAY_START; mi <= DISPLAY_END; mi++) {
+    const td = document.createElement('td'); td.className = 'amount-cell';
+    td.innerHTML = `<div class="cell-inner"><span class="cell-amt">${valFn(mi)}</span></div>`;
+    tr.appendChild(td);
+  }
+  tbody.appendChild(tr);
+}
+
+function buildRow(item) {
+  const tr = document.createElement('tr');
+  if (item._carryover) tr.classList.add('carry-row');
+
+  // ── Name cell ──
+  const nameTd = document.createElement('td');
+  nameTd.className = 'name-cell'; nameTd.dataset.ctx = '1';
+
+  const handle = document.createElement('span');
+  handle.className = 'drag-handle'; handle.textContent = '⠿';
+  nameTd.appendChild(handle);
+
+  const label = document.createElement('span');
+  label.className = 'item-label'; label.textContent = item.name;
+  label.addEventListener('dblclick', e => { e.stopPropagation(); enableRename(label, item.id); });
+  nameTd.appendChild(label);
+
+  let badgeCls, badgeTxt;
+  if      (item._carryover)          { badgeCls = 'b-carry';  badgeTxt = '上月结余'; }
+  else if (item._auto)               { badgeCls = 'b-auto';   badgeTxt = 'auto'; }
+  else if (item._builtIn)            { badgeCls = 'b-preset'; badgeTxt = 'preset'; }
+  else if (item.type === 'fixed')    { badgeCls = 'b-fixed';  badgeTxt = 'fixed'; }
+  else                               { badgeCls = 'b-flex';   badgeTxt = 'flex'; }
+  const badge = document.createElement('span');
+  badge.className = 'badge ' + badgeCls; badge.textContent = badgeTxt;
+  nameTd.appendChild(badge);
+
+  if (!item._builtIn && item.type === 'fixed') {
+    const pl = document.createElement('span'); pl.className = 'period-lbl';
+    pl.textContent = ALL_MONTHS[item.startMonth] + '–' + ALL_MONTHS[item.endMonth];
+    nameTd.appendChild(pl);
+  }
+
+  // Right-click name → delete (ALL items)
+  nameTd.addEventListener('contextmenu', e => showCtxName(e, item.id));
+  tr.appendChild(nameTd);
+
+  // ── Month cells ──
+  for (let mi = DISPLAY_START; mi <= DISPLAY_END; mi++) {
+    const td = document.createElement('td');
+
+    if (!inMonth(item, mi)) {
+      td.className = 'amount-cell empty';
+      td.innerHTML = '<div class="cell-inner"><span style="color:#222">—</span></div>';
+    } else {
+      // Future carryover: show blank, no interaction
+      if (item._carryover && mi > CURRENT_MONTH) {
+        td.className = 'amount-cell empty';
+        td.innerHTML = '<div class="cell-inner"><span style="color:#2a2a38">—</span></div>';
+        tr.appendChild(td); continue;
+      }
+
+      const isPaid = !!state.paid[pk(item.id, mi)];
+      // Auto-computed carryover (not the first editable one): never toggle-paid
+      const isAutoCarry = item._carryover && mi !== DISPLAY_START;
+      td.className = 'amount-cell' + (isPaid && !isAutoCarry ? ' paid' : '');
+
+      const amtSpan = document.createElement('span');
+      amtSpan.className = 'cell-amt';
+      amtSpan.textContent = fmtN(cellAmount(item, mi));
+
+      const inner = document.createElement('div');
+      inner.className = 'cell-inner'; inner.appendChild(amtSpan);
+      if (item._carryover) {
+        const note = document.createElement('span'); note.className = 'cell-note';
+        note.textContent = mi === DISPLAY_START ? '← manual' : '← auto';
+        inner.appendChild(note);
+      }
+      td.appendChild(inner);
+
+      if (isAutoCarry) {
+        // Double-click only — edit the override amount; no toggle-paid
+        amtSpan.addEventListener('dblclick', e => {
+          e.stopPropagation();
+          enableAmountEdit(td, item, mi);
+        });
+        td.title = 'Dblclick ¥ to override';
+      } else {
+        let clickTimer = null;
+        td.addEventListener('click', () => {
+          if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; return; }
+          clickTimer = setTimeout(() => { clickTimer = null; togglePaid(item.id, mi); }, 220);
+        });
+        amtSpan.addEventListener('dblclick', e => {
+          e.stopPropagation();
+          if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+          enableAmountEdit(td, item, mi);
+        });
+        td.title = isPaid ? 'Click to unmark · Dblclick ¥ to edit' : 'Click to mark paid · Dblclick ¥ to edit';
+
+        const isMoveable = !item._builtIn && !item._auto && !isPaid
+          && (item.type === 'flexible' || item.type === 'fixed');
+        if (isMoveable) {
+          td.dataset.ctx = '1';
+          td.addEventListener('contextmenu', e => showCtxCell(e, item.id, mi));
+        }
+      }
+    }
+    tr.appendChild(td);
+  }
+
+  attachDrag(tr, item.id);
+  return tr;
+}
+
+function togglePaid(itemId, mi) {
+  state.paid[pk(itemId, mi)] = !state.paid[pk(itemId, mi)];
+  save(); render();
+}
+
+// ── Income ────────────────────────────────────────────────
+document.getElementById('income-input').addEventListener('input', function() {
+  state.income = parseFloat(this.value) || 0; save(); render();
+});
+['item-name','item-amount'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') addOutcome(); });
+});
+
+// ── Init ──────────────────────────────────────────────────
+buildMonthSelects(); syncFormType(); render(); checkMonthEndBanner();
+</script>
+</body>
+</html>
