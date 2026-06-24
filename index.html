@@ -15,8 +15,12 @@
   .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
   h1 { font-size: 22px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
   .btn-action { border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-  .btn-export  { background: #1e3a2e; color: #4ade80; border: 1px solid #166534; }
-  .btn-export:hover  { background: #166534; }
+  .btn-export       { background: #1e3a2e; color: #4ade80; border: 1px solid #166534; }
+  .btn-export:hover { background: #166534; }
+  .btn-state-export       { background: #1a1a2e; color: #818cf8; border: 1px solid #3a3a6a; }
+  .btn-state-export:hover { background: #2a2a4e; }
+  .btn-state-import       { background: #1a1a2e; color: #a78bfa; border: 1px solid #3a3a6a; cursor: pointer; }
+  .btn-state-import:hover { background: #2a2a4e; }
 
 
   /* Stats */
@@ -164,7 +168,11 @@
 
 <div class="top-bar">
   <h1>Payment Dashboard</h1>
-  <button class="btn-action btn-export" onclick="exportExcel(CURRENT_MONTH)">⬇ Export This Month</button>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="btn-action btn-export" onclick="exportExcel(CURRENT_MONTH)">⬇ Export Excel</button>
+    <button class="btn-action btn-state-export" onclick="exportState()">⬆ Backup Data</button>
+    <label class="btn-action btn-state-import">⬇ Restore Data<input type="file" accept=".json" style="display:none" onchange="importState(event)"></label>
+  </div>
 </div>
 
 
@@ -585,6 +593,31 @@ function enableAmountEdit(td, item, mi) {
   });
   inp.addEventListener('click',    e => e.stopPropagation());
   inp.addEventListener('dblclick', e => e.stopPropagation());
+}
+
+// ── State backup / restore ────────────────────────────────
+function exportState() {
+  const json = JSON.stringify(state, null, 2);
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+  a.download = 'payment-state-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  showToast('✅ Data backed up', 'success');
+}
+
+function importState(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const s = JSON.parse(ev.target.result);
+      if (!s.customs && !s.paid) { showToast('❌ Invalid file', 'info'); return; }
+      localStorage.setItem('pmt-dash-v5', ev.target.result);
+      location.reload();
+    } catch { showToast('❌ Could not read file', 'info'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
 }
 
 // ── Toast ─────────────────────────────────────────────────
